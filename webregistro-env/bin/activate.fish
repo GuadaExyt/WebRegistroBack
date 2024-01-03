@@ -1,5 +1,9 @@
 # This file must be used with "source <venv>/bin/activate.fish" *from fish*
+<<<<<<< HEAD
 # (https://fishshell.com/); you cannot run it directly.
+=======
+# (https://fishshell.com/). You cannot run it directly.
+>>>>>>> origin/main
 
 function deactivate  -d "Exit virtual environment and return to normal shell environment"
     # reset old environment variables
@@ -33,7 +37,11 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
+<<<<<<< HEAD
 set -gx VIRTUAL_ENV "/Users/exyt/Desktop/GCP/WebRegistro_1.0/webregistro-env"
+=======
+set -gx VIRTUAL_ENV "/Users/guada/Desktop/GCP/FASTAPI/ProyectoWeb_1.0/webregistro-env"
+>>>>>>> origin/main
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/bin" $PATH

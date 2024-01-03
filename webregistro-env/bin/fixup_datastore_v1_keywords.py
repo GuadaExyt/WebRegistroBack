@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 #!/Users/exyt/Desktop/GCP/WebRegistro_1.0/webregistro-env/bin/python3.11
+=======
+#!/Users/guada/Desktop/GCP/FASTAPI/ProyectoWeb_1.0/webregistro-env/bin/python3.12
+>>>>>>> origin/main
 # -*- coding: utf-8 -*-
 # Copyright 2023 Google LLC
 #
