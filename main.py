@@ -1,12 +1,27 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import Depends, FastAPI, HTTPException, Header
 from pydantic import BaseModel
 from datetime import datetime
 from google.cloud import datastore
-from http import server
 from fastapi.middleware.cors import CORSMiddleware
+from firebase_admin import credentials, initialize_app, auth
+import firebase_admin
+
 
 client = datastore.Client()
 app = FastAPI()
+
+cred = credentials.Certificate("credentials/credentialsfirebase.json")
+firebase_admin.initialize_app(cred)
+
+# uid = 'some-uid'
+# custom_token = auth.create_custom_token(uid)
+# print(f"this is a custom token: {custom_token}")
+
+# TIENE QUE IR DENTRO DE LA FUNCION 
+# decoded_token = auth.verify_id_token(idToken)
+# uid = decoded_token['uid']
+
+# print(f"This is the decoded token {decoded_token}")
 
 class MessageBody(BaseModel):
     name: str
@@ -17,7 +32,7 @@ class MessageBody(BaseModel):
 #FUNCION PARA PROCESAR EL FORMULARIO
 def process_form(name, ts, file_url, done=True):
     #name = request.form["name"]
-    timestamp = datastore.Entity(client.key("Timestamp", name))
+    timestamp = datastore.Entity(client.key("Photo"))
     timestamp.update({
         "name": name,
         "time": ts,
@@ -28,12 +43,46 @@ def process_form(name, ts, file_url, done=True):
     client.put(timestamp)
     return "Has sido registrado"
 
-@app.post("/timestamp/")
-def create_timestamp(message_body: MessageBody):
-    current_time = datetime.now()
-    print(f" Nombre: {message_body.name}, Timestamp: {current_time}, File URL: {message_body.file_url}")
-    process_form(message_body.name, current_time, message_body.file_url, done=True)
-    return {"name": f"{message_body.name}", "file_url": message_body.file_url}
+#VERIFICAR EL TOKEN DEL BACK
+
+@app.post("/photo/")
+def create_timestamp(message_body: MessageBody, authorization: str = Header(...)):
+    try: 
+        token = authorization.replace("Bearer ", "")
+        decoded_token = auth.verify_id_token(token)
+        print(decoded_token)
+
+    except Exception as e:
+        print(e)
+        raise  HTTPException(status_code=401, detail=f"Error en la autenticación")
+    
+    try:
+        current_time = datetime.now()
+        print(f"Nombre: {message_body.name}, Timestamp: {current_time}, File URL: {message_body.file_url}")
+        process_form(message_body.name, current_time, message_body.file_url, done=True)
+        result = {"message": "Registro exitoso"}  
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=400, detail=f"Error en el proceso: {str(e)}")  # DEVUELVE ERROR
+    
+    return result
+
+
+# NUEVO END POINT POST /photo.
+
+@app.post("/photo/")
+def upload_photo_and_register(message_body: MessageBody):
+    try:
+        current_time = datetime.now()
+        #CONTIENE EL ID UNICO DEL USUARIO AL REGISTRAR O SUBIR UNA FOTO
+        print(f"Nombre: {message_body.name}, Timestamp: {current_time}, File URL: {message_body.file_url}")
+        process_form(message_body.name, current_time, message_body.file_url, done=True)
+        result = {"message": "Registro exitoso"}  # MENSAJE EXITOSO
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error en el proceso: {str(e)}")  # ERROR
+
+    return result  
+
 
 #PERMITIR SOLICITUDES DESDE EL DOMINIO DE MI APLICACIÓN
 app.add_middleware(
@@ -43,38 +92,3 @@ app.add_middleware(
     allow_methods=["*"],  
     allow_headers=["*"],  
 )
-
-
-#AÑADIR ARCHIVO NO FUNCIONA 
-# class MessageBody(BaseModel):
-#     name: str
-
-# class UploadItem(BaseModel):
-#     file: bytes
-#     filename: str
-#     content_type: str
-
-# # Procesamiento del formulario y manejo del archivo
-# def process_form(name, ts, file, done=True):
-#     timestamp = datastore.Entity(client.key("Timestamp", name))
-#     timestamp.update({
-#         "name": name,
-#         "time": ts,
-#         "done": done,
-#     })
-
-#     client.put(timestamp)
-
-#     return "Has sido registrado"
-
-# # Ruta POST para recibir datos y archivos
-# @app.post("/timestamp/")
-# async def create_timestamp(message_body: MessageBody, file: UploadFile = File(...)):
-#     try:
-#         current_time = datetime.now()
-#         print(f"Nombre: {message_body.name}, Timestamp: {current_time}")
-#         # Llamar a la función para procesar el formulario y el archivo
-#         result = process_form(message_body.name, current_time, file)
-#         return result
-#     except Exception as e:
-#         return {"error": f"Error al procesar la solicitud: {str(e)}"}

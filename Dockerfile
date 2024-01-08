@@ -8,6 +8,7 @@ COPY credentials.json /usr/src/app/credentials.json
 ENV GOOGLE_APPLICATION_CREDENTIALS=/usr/src/app/credentials.json
 
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install firebase_admin
 
 COPY . .
 
