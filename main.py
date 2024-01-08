@@ -5,6 +5,7 @@ from google.cloud import datastore
 from fastapi.middleware.cors import CORSMiddleware
 from firebase_admin import credentials, initialize_app, auth
 import firebase_admin
+import uuid
 
 
 client = datastore.Client()
@@ -58,31 +59,16 @@ def create_timestamp(message_body: MessageBody, authorization: str = Header(...)
     
     try:
         current_time = datetime.now()
+        #GENERA NOMBRE ÚNICO USANDO UUID 
+        file_name = str(uuid.uuid4()) + '_' + message_body.name
         print(f"Nombre: {message_body.name}, Timestamp: {current_time}, File URL: {message_body.file_url}")
-        process_form(message_body.name, current_time, message_body.file_url, done=True)
+        process_form(file_name , current_time, message_body.file_url, done=True)
         result = {"message": "Registro exitoso"}  
     except Exception as e:
         print(e)
         raise HTTPException(status_code=400, detail=f"Error en el proceso: {str(e)}")  # DEVUELVE ERROR
     
     return result
-
-
-# NUEVO END POINT POST /photo.
-
-@app.post("/photo/")
-def upload_photo_and_register(message_body: MessageBody):
-    try:
-        current_time = datetime.now()
-        #CONTIENE EL ID UNICO DEL USUARIO AL REGISTRAR O SUBIR UNA FOTO
-        print(f"Nombre: {message_body.name}, Timestamp: {current_time}, File URL: {message_body.file_url}")
-        process_form(message_body.name, current_time, message_body.file_url, done=True)
-        result = {"message": "Registro exitoso"}  # MENSAJE EXITOSO
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error en el proceso: {str(e)}")  # ERROR
-
-    return result  
-
 
 #PERMITIR SOLICITUDES DESDE EL DOMINIO DE MI APLICACIÓN
 app.add_middleware(
