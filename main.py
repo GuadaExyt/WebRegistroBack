@@ -86,11 +86,19 @@ def get_user_photos(authorization: str = Header(...)):
         # print("query IMPRESO:", query) 
         
         photos = list(query.fetch())
-        user_photo_urls = [photo.get("file_url")for photo in photos] 
-        
+        # user_photo_urls = [photo.get("file_url")for photo in photos] 
+        user_photo_info = []
+        for photo in photos:
+            photo_info = {
+                "file_url": photo["file_url"],
+                "name": photo["name"],
+                "time": photo["time"],
+            }
+            user_photo_info.append(photo_info)
 
-        print("URLs de las fotos del usuario:", user_photo_urls)
-        return {"photo_urls": user_photo_urls}
+        print("Información de las fotos del usuario:", user_photo_info)
+        return {"user_photos": user_photo_info}
+
 
     except Exception as e:
         print(e)
