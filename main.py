@@ -1,9 +1,10 @@
-from fastapi import Depends, FastAPI, HTTPException, Header
+from fastapi import Depends, FastAPI, HTTPException, Header, Path
 from pydantic import BaseModel
 from datetime import datetime
 from google.cloud import datastore
 from fastapi.middleware.cors import CORSMiddleware
-from firebase_admin import credentials, initialize_app, auth
+from firebase_admin import credentials, initialize_app, auth, storage
+from firebase_admin import storage as firebase_storage
 import firebase_admin
 import uuid
 
@@ -12,7 +13,8 @@ client = datastore.Client()
 app = FastAPI()
 
 cred = credentials.Certificate("credentials/credentialsfirebase.json")
-firebase_admin.initialize_app(cred)
+firebase_admin.initialize_app(cred, {"storageBucket": "myproject-5a445.appspot.com"})
+bucket = firebase_storage.bucket()
 
 class MessageBody(BaseModel):
     name: str
@@ -86,10 +88,10 @@ def get_user_photos(authorization: str = Header(...)):
         # print("query IMPRESO:", query) 
         
         photos = list(query.fetch())
-        # user_photo_urls = [photo.get("file_url")for photo in photos] 
         user_photo_info = []
         for photo in photos:
             photo_info = {
+                "id": str(photo.key.id), # Asegúrate de incluir el id como una cadena
                 "file_url": photo["file_url"],
                 "name": photo["name"],
                 "time": photo["time"],
@@ -99,11 +101,56 @@ def get_user_photos(authorization: str = Header(...)):
         print("Información de las fotos del usuario:", user_photo_info)
         return {"user_photos": user_photo_info}
 
-
     except Exception as e:
         print(e)
         raise HTTPException(status_code=400, detail=f"Error en la consulta: {str(e)}")
     
+    #✨ feat: añadir método DELETE /photo/:id
+
+
+from fastapi import APIRouter, Header, HTTPException, Path
+from google.cloud import datastore
+from firebase_admin import auth, storage
+
+router = APIRouter()
+
+# Configurar el cliente de Datastore
+client = datastore.Client()
+
+@app.delete("/photo/{photo_id}")
+async def delete_photo(
+    photo_id: str = Path(..., title="ID de la foto a eliminar"),
+    authorization: str = Header(...),
+):
+    try:
+        token = authorization.replace("Bearer ", "")
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token.get("uid")
+        print("ID de usuario:", user_id)
+
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=401, detail="Error en la autenticación")
+
+    #RECUPERAR ENTIDAD CORRESPONDIENTE AL ID DATASTORE
+    key = client.key("Photo", int(photo_id))
+    photo_entity = client.get(key)
+
+    # VERIFICAR SI EXISTE LA ENTIDAD Y SI SU USUARIO ES CORRESPONDIENTE 
+    if not photo_entity or photo_entity["user_id"] != user_id:
+        raise HTTPException(status_code=404, detail="Foto no encontrada o no autorizada")
+
+    try:
+        # ELIMINA EL REGISTRO EN DATASTORE
+        client.delete(key)
+
+        result = {"message": "Eliminación exitosa en Datastore"}
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail=f"Error en el proceso de eliminación en Datastore: {str(e)}")
+
+    return result
+
 #PERMITIR SOLICITUDES DESDE EL DOMINIO DE MI APLICACIÓN
 app.add_middleware(
     CORSMiddleware,
