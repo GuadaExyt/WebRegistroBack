@@ -91,7 +91,7 @@ def get_user_photos(authorization: str = Header(...)):
         user_photo_info = []
         for photo in photos:
             photo_info = {
-                "id": str(photo.key.id), # Asegúrate de incluir el id como una cadena
+                "id": str(photo.key.id),
                 "file_url": photo["file_url"],
                 "name": photo["name"],
                 "time": photo["time"],
@@ -105,17 +105,7 @@ def get_user_photos(authorization: str = Header(...)):
         print(e)
         raise HTTPException(status_code=400, detail=f"Error en la consulta: {str(e)}")
     
-    #✨ feat: añadir método DELETE /photo/:id
-
-
-from fastapi import APIRouter, Header, HTTPException, Path
-from google.cloud import datastore
-from firebase_admin import auth, storage
-
-router = APIRouter()
-
-# Configurar el cliente de Datastore
-client = datastore.Client()
+#✨ feat: añadir método DELETE /photo/:id
 
 @app.delete("/photo/{photo_id}")
 async def delete_photo(
