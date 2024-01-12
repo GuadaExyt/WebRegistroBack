@@ -98,6 +98,8 @@ def get_user_photos(authorization: str = Header(...)):
             }
             user_photo_info.append(photo_info)
 
+        #ORDENAR LAS FOTOS
+        user_photo_info = sorted(user_photo_info, key=lambda x: x["time"], reverse=True)
         print("Información de las fotos del usuario:", user_photo_info)
         return {"user_photos": user_photo_info}
 
