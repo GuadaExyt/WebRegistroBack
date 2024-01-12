@@ -132,6 +132,7 @@ async def delete_photo(
         print(e)
         raise HTTPException(status_code=401, detail="Error en la autenticación")
 
+    # Obtener la entidad de Datastore correspondiente al ID
     #RECUPERAR ENTIDAD CORRESPONDIENTE AL ID DATASTORE
     key = client.key("Photo", int(photo_id))
     photo_entity = client.get(key)
