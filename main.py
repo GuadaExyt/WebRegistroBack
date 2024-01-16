@@ -1,12 +1,14 @@
-from fastapi import Depends, FastAPI, HTTPException, Header, Path
+from fastapi import Depends, FastAPI, HTTPException, Header, Path, status
+from fastapi import APIRouter
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
 from google.cloud import datastore
-from fastapi.middleware.cors import CORSMiddleware
-from firebase_admin import credentials, initialize_app, auth, storage
+from firebase_admin import credentials, initialize_app, auth
 from firebase_admin import storage as firebase_storage
 import firebase_admin
-import uuid
+
+
 
 
 client = datastore.Client()
@@ -18,24 +20,44 @@ bucket = firebase_storage.bucket()
 
 class MessageBody(BaseModel):
     name: str
-    file_url: str 
+    file_url: str
+    # admin: bool = False 
     
 #FORMULARIO
 
 #FUNCION PARA PROCESAR EL FORMULARIO
-def process_form(name, ts, file_url, user_id,  done=True):
+def process_form(name, ts, file_url, user_id, done=True):
     #name = request.form["name"]
-    timestamp = datastore.Entity(client.key("Photo"))
-    timestamp.update({
+    newregister = datastore.Entity(client.key("Photo"))
+    newregister.update({
         "name": name,
         "time": ts,
         "done": done,
         "file_url": file_url,
         "user_id": user_id,
+        # "admin": admin,
         })
 
-    client.put(timestamp)
+    client.put(newregister)
     return "Has sido registrado"
+
+#FUNCION PARA ASIGNAR EL ROL DE ADMIN A USER 
+def assign_admin_user(decoded_token):
+    try:
+        # OBTENER UID DEL TOKEN DECODIFICADO
+        uid = decoded_token.get('uid')
+
+        # VERIFICAR SI COINCIDEN LOS UID
+        if uid == 'bA5bVViWviQLyAKLelVPIOUFGri2':
+            # ESTABLECE ROL DE ADMIN AL UID DETERMINADO
+            auth.set_custom_user_claims(uid, {'admin': True})
+            print(f"Se ha asignado la función de Admin al usuario con UID: {uid}")
+        else:
+            auth.set_custom_user_claims(uid, {'admin': False})
+            print(f"El usuario con UID: {uid} no tiene permisos de administrador.")
+    
+    except Exception as e:
+        print(f"Error al asignar la función de Admin: {str(e)}")
 
 #VERIFICAR EL TOKEN DEL BACK
 
@@ -47,15 +69,12 @@ def create_timestamp(message_body: MessageBody, authorization: str = Header(...)
         user_id = decoded_token.get('uid')
         print("DECODED TOKEN:", decoded_token)
 
-
     except Exception as e:
         print(e)
         raise  HTTPException(status_code=401, detail=f"Error en la autenticación")
     
     try:
         current_time = datetime.now()
-
-        #GENERA NOMBRE ÚNICO USANDO UUID 
         file_name = message_body.name
         print(f"Nombre: {message_body.name}, Timestamp: {current_time}, File URL: {message_body.file_url}, User_id: {user_id}")
         process_form(file_name , current_time, message_body.file_url, user_id, done=True)
@@ -74,10 +93,11 @@ def get_user_photos(authorization: str = Header(...)):
         token = authorization.replace("Bearer ", "")
         decoded_token = auth.verify_id_token(token)
         user_id = decoded_token.get('uid')
+        user_email = decoded_token.get('email') 
         print("ID de usuario:", user_id)
+        # assign_admin_user(user_id) 
 
         print(decoded_token)
-
     except Exception as e:
         print(e)
         raise  HTTPException(status_code=401, detail=f"Error en la autenticación")
@@ -108,7 +128,6 @@ def get_user_photos(authorization: str = Header(...)):
         raise HTTPException(status_code=400, detail=f"Error en la consulta: {str(e)}")
     
 #✨ feat: añadir método DELETE /photo/:id
-
 @app.delete("/photo/{photo_id}")
 async def delete_photo(
     photo_id: str = Path(..., title="ID de la foto a eliminar"),
@@ -124,7 +143,6 @@ async def delete_photo(
         print(e)
         raise HTTPException(status_code=401, detail="Error en la autenticación")
 
-    # Obtener la entidad de Datastore correspondiente al ID
     #RECUPERAR ENTIDAD CORRESPONDIENTE AL ID DATASTORE
     key = client.key("Photo", int(photo_id))
     photo_entity = client.get(key)
@@ -143,6 +161,53 @@ async def delete_photo(
         raise HTTPException(status_code=500, detail=f"Error en el proceso de eliminación en Datastore: {str(e)}")
 
     return result
+
+# ✨ feat: añadir endpoint GET /user —> para obtener todos los usuarios de nuestra app
+@app.get("/user", response_model=dict)
+def get_all_users(authorization: str = Header(...)):
+    try:
+        token = authorization.replace("Bearer ", "")
+        decoded_token = auth.verify_id_token(token)
+        # ACTUALIZAMOS LÓGICA
+        assign_admin_user(decoded_token)
+        # VERIFICAR SI EL USER CUMPLE EL ROL DE ADMIN
+        admin_claim = decoded_token.get('admin')
+        if admin_claim is None or not admin_claim:
+            print("Usuario sin permisos de administrador")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="El usuario no tiene permisos de administrador."
+            )
+
+        # OBTENER TODOS LOS USUARIOS
+        all_users = auth.list_users()
+
+        # INFORMACIÓN DEL USUARIO
+        user_list = []
+        for user in all_users.users:
+            # OBTENER EL VALOR DE ADMIN
+            custom_claims = user.custom_claims or {}
+            admin_value = custom_claims.get('admin')
+
+            user_info = {
+                'uid': user.uid,
+                'email': user.email,
+                'admin': admin_value
+            }
+            user_list.append(user_info)
+
+        return {"users": user_list}
+
+    except auth.InvalidIdTokenError as e:
+        print(f"Error en la autenticación: {e}")
+        raise HTTPException(status_code=401, detail="Token de identificación no válido")
+
+    except HTTPException as he:
+        raise he  # (*Re-lanzar la excepción HTTPException directamente*)
+
+    except Exception as e:
+        print(f"Error desconocido: {e}")
+        raise HTTPException(status_code=401, detail="Error en la autenticación")
 
 #PERMITIR SOLICITUDES DESDE EL DOMINIO DE MI APLICACIÓN
 app.add_middleware(
