@@ -9,9 +9,6 @@ from firebase_admin import credentials, initialize_app, auth
 from firebase_admin import storage as firebase_storage
 import firebase_admin
 
-
-
-
 client = datastore.Client()
 app = FastAPI()
 
@@ -28,8 +25,11 @@ class CreateUserBody(BaseModel):
     email: str
     password: str
     admin: Optional[bool] = False
-
     
+# DEFINIR LA ESTRUCTURA DEL CUERPO DE LA SOLICITUD PARA EDITAR 
+class UserPermissionsUpdate(BaseModel):
+    admin: bool
+
 #FORMULARIO
 
 #FUNCION PARA PROCESAR EL FORMULARIO
@@ -292,7 +292,40 @@ def disable_user(uid: str, authorization: str = Header(...)):
     except Exception as e:
         print(f"Error desconocido: {e}")
         raise HTTPException(status_code=500, detail=f"Error al deshabilitar el usuario: {str(e)}")
-    
+
+ # ✨ feat: añadir endpoint PUT /user/{uid} —> para editar los permisos de un usuario
+@app.put("/user/{uid}", response_model=dict)
+def edit_user_permissions(
+    uid: str,
+    user_update: UserPermissionsUpdate,
+    authorization: str = Header(..., description="Token de autenticación con permisos de administrador")
+):
+    try:
+        decoded_token = auth.verify_id_token(authorization.replace("Bearer ", ""))
+        admin_claim = decoded_token.get('admin')
+        if admin_claim is None or not admin_claim:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="El usuario no tiene permisos de administrador."
+            )
+
+        # EDITAR PERMISOS DE USUARIO CON Firebase Authentication
+        auth.set_custom_user_claims(uid, {'admin': user_update.admin})
+
+        return {"message": f"Permisos del usuario con UID {uid} editados correctamente"}
+
+    except auth.InvalidIdTokenError as e:
+        print(f"Error en la autenticación: {e}")
+        raise HTTPException(status_code=401, detail="Token de identificación no válido")
+
+    except HTTPException as he:
+        print(f"Error HTTP: {he.detail}")
+        raise he
+
+    except Exception as e:
+        print(f"Error desconocido: {e}")
+        raise HTTPException(status_code=500, detail=f"Error al editar los permisos del usuario: {str(e)}")
+       
 #PERMITIR SOLICITUDES DESDE EL DOMINIO DE MI APLICACIÓN
 app.add_middleware(
     CORSMiddleware,
