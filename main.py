@@ -217,7 +217,7 @@ def get_all_users(authorization: str = Header(...)):
         raise HTTPException(status_code=401, detail="Error en la autenticación")
     
 # ✨ feat: añadir endpoint POST /user —> para crear un nuevo usuario
-@app.post("/user", response_model=dict)
+@app.post("/user/", response_model=dict)
 def create_user(user_body: CreateUserBody, authorization: str = Header(...)):
     try:
         # TOKEN DE AUTORIZACIÓN
@@ -261,6 +261,38 @@ def create_user(user_body: CreateUserBody, authorization: str = Header(...)):
         print(f"Error desconocido: {e}")
         raise HTTPException(status_code=500, detail=f"Error en la creación del usuario: {str(e)}")
 
+# ✨ feat: añadir endpoint DELETE /user/{uid} —> para deshabilitar un usuario en cuestión
+    
+@app.delete("/user/{uid}", response_model=dict)
+def disable_user(uid: str, authorization: str = Header(...)):
+    try:
+        token = authorization.replace("Bearer ", "")
+        decoded_token = auth.verify_id_token(token)
+        admin_claim = decoded_token.get('admin')
+
+        if admin_claim is None or not admin_claim:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="El usuario no tiene permisos de administrador."
+            )
+
+        # DESHABILITAR USUARIO CON Firebase Authentication
+        auth.update_user(uid, disabled=True)
+
+        return {"message": f"Usuario con UID {uid} deshabilitado correctamente"}
+
+    except auth.InvalidIdTokenError as e:
+        print(f"Error en la autenticación: {e}")
+        raise HTTPException(status_code=401, detail="Token de identificación no válido")
+
+    except HTTPException as he:
+        print(f"Error HTTP: {he.detail}")
+        raise he
+
+    except Exception as e:
+        print(f"Error desconocido: {e}")
+        raise HTTPException(status_code=500, detail=f"Error al deshabilitar el usuario: {str(e)}")
+    
 #PERMITIR SOLICITUDES DESDE EL DOMINIO DE MI APLICACIÓN
 app.add_middleware(
     CORSMiddleware,
