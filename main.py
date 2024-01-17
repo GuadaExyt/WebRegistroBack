@@ -25,7 +25,7 @@ class CreateUserBody(BaseModel):
     email: str
     password: str
     admin: Optional[bool] = False
-    
+
 # DEFINIR LA ESTRUCTURA DEL CUERPO DE LA SOLICITUD PARA EDITAR 
 class UserPermissionsUpdate(BaseModel):
     admin: bool
@@ -68,7 +68,7 @@ def assign_admin_user(decoded_token):
 
 #VERIFICAR EL TOKEN DEL BACK
 
-@app.post("/photo/")
+@app.post("/api/photo/")
 def create_timestamp(message_body: createRegisterBody, authorization: str = Header(...)):
     try: 
         token = authorization.replace("Bearer ", "")
@@ -94,7 +94,7 @@ def create_timestamp(message_body: createRegisterBody, authorization: str = Head
     
 
 #✨ feat: añadir método GET /photo
-@app.get("/photo/")
+@app.get("/api/photo/")
 def get_user_photos(authorization: str = Header(...)):
     try: 
         token = authorization.replace("Bearer ", "")
@@ -135,7 +135,7 @@ def get_user_photos(authorization: str = Header(...)):
         raise HTTPException(status_code=400, detail=f"Error en la consulta: {str(e)}")
     
 #✨ feat: añadir método DELETE /photo/:id
-@app.delete("/photo/{photo_id}")
+@app.delete("/api/photo/{photo_id}")
 async def delete_photo(
     photo_id: str = Path(..., title="ID de la foto a eliminar"),
     authorization: str = Header(...),
@@ -170,7 +170,7 @@ async def delete_photo(
     return result
 
 # ✨ feat: añadir endpoint GET /user —> para obtener todos los usuarios de nuestra app
-@app.get("/user", response_model=dict)
+@app.get("/api/user", response_model=dict)
 def get_all_users(authorization: str = Header(...)):
     try:
         token = authorization.replace("Bearer ", "")
@@ -217,7 +217,7 @@ def get_all_users(authorization: str = Header(...)):
         raise HTTPException(status_code=401, detail="Error en la autenticación")
     
 # ✨ feat: añadir endpoint POST /user —> para crear un nuevo usuario
-@app.post("/user/", response_model=dict)
+@app.post("/api/user/", response_model=dict)
 def create_user(user_body: CreateUserBody, authorization: str = Header(...)):
     try:
         # TOKEN DE AUTORIZACIÓN
@@ -263,7 +263,7 @@ def create_user(user_body: CreateUserBody, authorization: str = Header(...)):
 
 # ✨ feat: añadir endpoint DELETE /user/{uid} —> para deshabilitar un usuario en cuestión
     
-@app.delete("/user/{uid}", response_model=dict)
+@app.delete("/api/user/{uid}", response_model=dict)
 def disable_user(uid: str, authorization: str = Header(...)):
     try:
         token = authorization.replace("Bearer ", "")
@@ -294,7 +294,7 @@ def disable_user(uid: str, authorization: str = Header(...)):
         raise HTTPException(status_code=500, detail=f"Error al deshabilitar el usuario: {str(e)}")
 
  # ✨ feat: añadir endpoint PUT /user/{uid} —> para editar los permisos de un usuario
-@app.put("/user/{uid}", response_model=dict)
+@app.put("/api/user/{uid}", response_model=dict)
 def edit_user_permissions(
     uid: str,
     user_update: UserPermissionsUpdate,
