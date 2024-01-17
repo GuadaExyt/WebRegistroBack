@@ -1,5 +1,6 @@
 from fastapi import Depends, FastAPI, HTTPException, Header, Path, status
 from fastapi import APIRouter
+from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
@@ -18,10 +19,16 @@ cred = credentials.Certificate("credentials/credentialsfirebase.json")
 firebase_admin.initialize_app(cred, {"storageBucket": "myproject-5a445.appspot.com"})
 bucket = firebase_storage.bucket()
 
-class MessageBody(BaseModel):
+class createRegisterBody(BaseModel):
     name: str
     file_url: str
     # admin: bool = False 
+
+class CreateUserBody(BaseModel):
+    email: str
+    password: str
+    admin: Optional[bool] = False
+
     
 #FORMULARIO
 
@@ -62,7 +69,7 @@ def assign_admin_user(decoded_token):
 #VERIFICAR EL TOKEN DEL BACK
 
 @app.post("/photo/")
-def create_timestamp(message_body: MessageBody, authorization: str = Header(...)):
+def create_timestamp(message_body: createRegisterBody, authorization: str = Header(...)):
     try: 
         token = authorization.replace("Bearer ", "")
         decoded_token = auth.verify_id_token(token)
@@ -208,6 +215,51 @@ def get_all_users(authorization: str = Header(...)):
     except Exception as e:
         print(f"Error desconocido: {e}")
         raise HTTPException(status_code=401, detail="Error en la autenticación")
+    
+# ✨ feat: añadir endpoint POST /user —> para crear un nuevo usuario
+@app.post("/user", response_model=dict)
+def create_user(user_body: CreateUserBody, authorization: str = Header(...)):
+    try:
+        # TOKEN DE AUTORIZACIÓN
+        token = authorization.replace("Bearer ", "")
+        decoded_token = auth.verify_id_token(token)
+        admin_claim = decoded_token.get('admin')
+
+        # SI EL USUARIO TIENE PERMISOS DE ADMINISTRAODR
+        if admin_claim is None or not admin_claim:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="El usuario no tiene permisos de administrador."
+            )
+
+        # CREAR NUEVO USUARIO EN FIREBASE
+        new_user = auth.create_user(
+            email=user_body.email,
+            password=user_body.password,
+        )
+        # ESTABLECER VALOR DE ADMIN DESPUÉS DE CREAR USUARIO
+        auth.set_custom_user_claims(new_user.uid, {'admin': user_body.admin})
+
+        # INFORMACIÓN DEL USUARIO NUEVO
+        user_info = {
+            'uid': new_user.uid,
+            'email': new_user.email,
+            'admin': user_body.admin
+        }
+        return {"user": user_info}
+
+    except auth.InvalidIdTokenError as e:
+        # ERROR DE TOKEN DE IDENTIFICACIÓN
+        print(f"Error en la autenticación: {e}")
+        raise HTTPException(status_code=401, detail="Token de identificación no válido")
+    # MANEJO DE ERRORES 
+    except HTTPException as he:
+        print(f"Error HTTP: {he.detail}")
+        raise he
+
+    except Exception as e:
+        print(f"Error desconocido: {e}")
+        raise HTTPException(status_code=500, detail=f"Error en la creación del usuario: {str(e)}")
 
 #PERMITIR SOLICITUDES DESDE EL DOMINIO DE MI APLICACIÓN
 app.add_middleware(
