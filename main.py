@@ -1,3 +1,4 @@
+import json
 from fastapi import Depends, FastAPI, HTTPException, Header, Path, status
 from fastapi import APIRouter
 from typing import Optional
@@ -8,6 +9,8 @@ from google.cloud import datastore
 from firebase_admin import credentials, initialize_app, auth
 from firebase_admin import storage as firebase_storage
 import firebase_admin
+from google.cloud import pubsub_v1
+from concurrent import futures
 
 client = datastore.Client()
 app = FastAPI()
@@ -15,6 +18,15 @@ app = FastAPI()
 cred = credentials.Certificate("credentials/credentialsfirebase.json")
 firebase_admin.initialize_app(cred, {"storageBucket": "myproject-5a445.appspot.com"})
 bucket = firebase_storage.bucket()
+
+# TODO(developer)
+project_id = "datastore-408009"
+topic_id = "topic_uploadfile"
+
+publisher = pubsub_v1.PublisherClient()
+# The `topic_path` method creates a fully qualified identifier
+# in the form `projects/{project_id}/topics/{topic_id}`
+topic_path = publisher.topic_path(project_id, topic_id)
 
 class createRegisterBody(BaseModel):
     name: str
@@ -29,6 +41,11 @@ class CreateUserBody(BaseModel):
 # DEFINIR LA ESTRUCTURA DEL CUERPO DE LA SOLICITUD PARA EDITAR 
 class UserPermissionsUpdate(BaseModel):
     admin: bool
+
+def get_publisher_client():
+    publisher = pubsub_v1.PublisherClient()
+    return publisher
+
 
 #FORMULARIO
 
@@ -69,7 +86,7 @@ def assign_admin_user(decoded_token):
 #VERIFICAR EL TOKEN DEL BACK
 
 @app.post("/api/photo/")
-def create_timestamp(message_body: createRegisterBody, authorization: str = Header(...)):
+def create_timestamp(message_body: createRegisterBody, authorization: str = Header(...), publisher: pubsub_v1.PublisherClient = Depends(get_publisher_client),):
     try: 
         token = authorization.replace("Bearer ", "")
         decoded_token = auth.verify_id_token(token)
@@ -85,6 +102,19 @@ def create_timestamp(message_body: createRegisterBody, authorization: str = Head
         file_name = message_body.name
         print(f"Nombre: {message_body.name}, Timestamp: {current_time}, File URL: {message_body.file_url}, User_id: {user_id}")
         process_form(file_name , current_time, message_body.file_url, user_id, done=True)
+        
+        #MENSAJE
+        message_data = {
+            "file_url": message_body.file_url,
+            "name": message_body.name,
+            "time": str(datetime.now()),
+            "user_id": user_id,
+            "Acciones": "CREATE"
+        }
+
+        message_future = publisher.publish(topic_path, data=json.dumps(message_data).encode("utf-8"))
+        message_future.result()  
+        
         result = {"message": "Registro exitoso"}  
     except Exception as e:
         print(e)
@@ -158,9 +188,25 @@ async def delete_photo(
     if not photo_entity or photo_entity["user_id"] != user_id:
         raise HTTPException(status_code=404, detail="Foto no encontrada o no autorizada")
 
+    file_url = photo_entity.get("file_url")
+    name = photo_entity.get("name")
+    time = photo_entity.get("time").isoformat() 
     try:
         # ELIMINA EL REGISTRO EN DATASTORE
         client.delete(key)
+        # MENSAJE PARA PUB/SUB
+        message_data = {
+             "file_url": file_url,
+            "name": name,
+            "time": time,
+            "user_id": user_id,
+            "Acciones": "DELETE"
+        }
+
+        # PUBLICAR MENSAJE
+        topic_path = publisher.topic_path(project_id, topic_id)
+        message_future = publisher.publish(topic_path, data=json.dumps(message_data).encode("utf-8"))
+        message_future.result()  
 
         result = {"message": "Eliminación exitosa en Datastore"}
     except Exception as e:
@@ -176,7 +222,7 @@ def get_all_users(authorization: str = Header(...)):
         token = authorization.replace("Bearer ", "")
         decoded_token = auth.verify_id_token(token)
         # ACTUALIZAMOS LÓGICA
-        assign_admin_user(decoded_token)
+        # assign_admin_user(decoded_token)
         # VERIFICAR SI EL USER CUMPLE EL ROL DE ADMIN
         admin_claim = decoded_token.get('admin')
         if admin_claim is None or not admin_claim:
@@ -199,7 +245,8 @@ def get_all_users(authorization: str = Header(...)):
             user_info = {
                 'uid': user.uid,
                 'email': user.email,
-                'admin': admin_value
+                'admin': admin_value,
+                'disabled': user.disabled
             }
             user_list.append(user_info)
 
@@ -217,7 +264,7 @@ def get_all_users(authorization: str = Header(...)):
         raise HTTPException(status_code=401, detail="Error en la autenticación")
     
 # ✨ feat: añadir endpoint POST /user —> para crear un nuevo usuario
-@app.post("/api/user/", response_model=dict)
+@app.post("/api/user", response_model=dict)
 def create_user(user_body: CreateUserBody, authorization: str = Header(...)):
     try:
         # TOKEN DE AUTORIZACIÓN
